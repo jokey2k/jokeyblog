@@ -2,8 +2,8 @@
 .. slug: the-world-becomes-static
 .. date: 2013/02/17 22:08:40
 .. tags: software
-.. link: 
-.. description: 
+.. link:
+.. description: So after fighting with many blog systems over the years and not being able to find an either fully secure or uncomplex to maintainable beast, I decided to move to something statically generated.
 
 So after fighting with many blog systems over the years and not being able to find an either fully secure or uncomplex to maintainable beast, I decided to move to something statically generated.
 
@@ -11,4 +11,4 @@ Nowadays, platforms like Disqus allow for JS-fetched inline comments. So there's
 
 Editing these post in WYSIWIG is also possible thanks to live reStructuredText and markdown editors, so you don't need to imagine how your post will look like. Just write it, wait a second and see the result.
 
-So all my needs are satisfied, rendering the stuff is done with nikola for no particular reason, just one seen every now and then on `Planet Python <http://planet.python.org>`_. 
+So all my needs are satisfied, rendering the stuff is done with nikola for no particular reason, just one seen every now and then on `Planet Python <http://planet.python.org>`_.
