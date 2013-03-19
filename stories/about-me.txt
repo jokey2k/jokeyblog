@@ -1,0 +1,25 @@
+.. title: About me
+.. slug: about-me
+.. date: 2013/02/17 22:26:31
+.. tags: 
+.. link: 
+.. description: 
+
+My name is Markus Ullmann and I'm a developer familiar with many environments and languages. Buzzwords are often just that, so I decide to regulary dig deeper in current technologies like realtime communication in browsers, mobile devices and other stuff.
+
+When not working on some code directly, I also do security research and enjoy leading a gaming clan for Trackmania and Team Fortress as well as weekly bowling and swimming.
+
+Work
+====
+My blog title is a result from my daily work which involves testing electronic devices in many ranges, devices for planes at the moment. Originally I used to work with and design PLC applications. To formalize the process of being able to design industrial controllers on my own and take responsibility for it, I decided to jump from industrial technician to a german "Diplom Ingenieur" degree.
+
+Reach me
+========
+
+If you feel like it and want to leave me a note, pick what best fits your suits
+
+* `e-mail <mailto:mail@markus-ullmann.de>`_
+* `jabber <xampp:jokey@digital-family.de>`_
+* drop me a note on `Xing <https://www.xing.com/profile/Markus_Ullmann>`_
+* leave me a message on `github <https://github.com/jokey2k>`_
+* send me a `tweet <http://twitter.com/jokey2k>`_
