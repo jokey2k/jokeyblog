@@ -1,0 +1,62 @@
+.. title: Projects
+.. slug: projects
+.. date: 2013/02/17 22:57:14
+.. tags: 
+.. link: 
+.. description: 
+
+Over the years I took an active part in a bunch of open source projects.
+
+* `Gentoo Linux <http://www.gentoo.org>`_:
+    - 5 years as developer
+    - one and a half year technical leader on elected council group
+    - founder of project "Sunrise" to help recruiting new people
+* Google:
+    - Mentor in `Summer of Code <https://developers.google.com/open-source/soc>`_ 2007 for "Ventoo" under Gentoo umbrella
+* `PySide <http://www.pyside.org>`_:
+    - build support for OS X platform
+* LUG Flensburg:
+    – Event cash systems development based on current hype technologies, `LugCampKasse <https://github.com/jokey2k/lugcampkasse>`_ being the latest reincarnation
+
+Conferences
+===========
+
+Besides all the coding I enjoy travelling all across europe to meet friends and fellow devs. Some events where I have been spotted:
+
+* LUG Camp
+    - 2004 onwards all except 2011
+      Meeting fellows there has already become a big family-like event. I have been part of orga for two of them, both
+      held in Flensburg. Really this is worth the effort.
+* FOSDEM
+    - Best social event I have ever been to if you want to have a meet and greet with big names in Europe regarding  
+      open source movement
+    - manned up on Gentoo booth in 2007
+* Chemnitzer Linux Tage
+    - manned up on Gentoo booth in 2008
+
+Sprints
+=======
+
+Sprinting is one thing best done if you want to dig deep in technology. So I run them every now and then.
+
+LemonPOS 2008
+-------------
+
+One notably big sprint held in Flensburg was about extending LemonPOS to allow for simple barcode usage and voucher prepaid. Targets involved being used as tool on LugCamp 2008, which was a success in the end.
+
+`CoreSphere <https://github.com/CoreSphere/CoreSphere>`_
+--------------------------------------------------------
+
+Another big sprint I held was to see if a port of ClanSphere, a Clan CMS, to Sympfony 2.0, the all-new development platform on PHP is doable and maintainable by the community without much effort. After having a port of an ActiveRecord-like database handling, a web console for entering commands without a need to be on the server and a basic system going, the framework part was done. Then, a first simple plugin was written to maintain blog-like posting. The requirements for such systems are minimal yet the lines of code involved to get this simple plugin going was way beyond 300, so the project was stopped afterwards.
+
+Still alive is the data mapper and the console, still maintained by a fellow dev of mine
+
+* `DataPhant <https://github.com/laszlokorte/Dataphant>`_
+* `WebConsole <https://github.com/CoreSphere/ConsoleBundle>`_
+
+PyFire
+------
+
+After having a couple of isssues with other well-known jabber servers, a try was held to see if it is possible to reimplement something jabber-like with an unknown number of frontend servers for connection holding and backend servers for processing received stanzas. Technology-wise the project is written in Python with Async I/O from tornado and broker-less messaging with ZeroMQ. The implementation is complete to a level where one can register themselves and send messages within the server cloud. Due to the fact that XMPP specs are a beast to implement, the project is on hold currently, waiting for another bad jabber server issue to pop up and require its revival.
+
+Sources are `available <https://github.com/IgnitedAndExploded/pyfire>`_
