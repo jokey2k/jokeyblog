@@ -1,0 +1,318 @@
+Add support similar to Match exec from ssh_config to sshd_config
+
+Usage as follows:
+Match exec "/path/to/wrapssh '%h' '%a' '%l' '%A'"
+    MaxAuthTries 0
+
+Patch from Damien Mullier at
+http://lists.mindrot.org/pipermail/openssh-unix-dev/2014-April/032514.html
+
+adapted to OpenSSH 6.7p1
+by Markus Ullmann <mail@markus-ullmann.de>
+
+License: BSD
+
+diff -urN ./openssh-6.7p1.orig/misc.c ./openssh-6.7p1/misc.c
+--- ./openssh-6.7p1.orig/misc.c	2015-03-08 09:29:45.000000000 +0100
++++ ./openssh-6.7p1/misc.c	2015-03-08 11:48:52.169348378 +0100
+@@ -31,11 +31,13 @@
+ #include <sys/socket.h>
+ #include <sys/un.h>
+ #include <sys/param.h>
++#include <sys/wait.h>
+ 
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <signal.h>
+ #include <time.h>
+ #include <unistd.h>
+ 
+@@ -1144,3 +1146,80 @@
+ 		error("setsockopt IPV6_V6ONLY: %s", strerror(errno));
+ #endif
+ }
++
++/*
++ * Execute a command in a shell.
++ * Return its exit status or -1 on abnormal exit.
++ */
++int
++execute_in_shell(const char *cmd, uid_t drop_uid)
++{
++	char *shell, *command_string;
++	pid_t pid;
++	int devnull, status;
++
++	if ((shell = getenv("SHELL")) == NULL)
++		shell = _PATH_BSHELL;
++
++	/*
++	 * Use "exec" to avoid "sh -c" processes on some platforms
++	 * (e.g. Solaris)
++	 */
++	xasprintf(&command_string, "exec %s", cmd);
++
++	/* Need this to redirect subprocess stdin/out */
++	if ((devnull = open(_PATH_DEVNULL, O_RDWR)) == -1)
++		fatal("open(/dev/null): %s", strerror(errno));
++
++	debug("Executing command: '%.500s'", cmd);
++
++	/* Fork and execute the command. */
++	if ((pid = fork()) == 0) {
++		char *argv[4];
++
++		/* Child.  Permanently give up superuser privileges. */
++		if (drop_uid != 0 &&
++		    setresuid(drop_uid, drop_uid, drop_uid) != 0)
++			fatal("%s: setresuid %lu: %s", __func__,
++			    (u_long)drop_uid, strerror(errno));
++
++		/* Redirect child stdin and stdout. Leave stderr */
++		if (dup2(devnull, STDIN_FILENO) == -1)
++			fatal("dup2: %s", strerror(errno));
++		if (dup2(devnull, STDOUT_FILENO) == -1)
++			fatal("dup2: %s", strerror(errno));
++		if (devnull > STDERR_FILENO)
++			close(devnull);
++		closefrom(STDERR_FILENO + 1);
++
++		argv[0] = shell;
++		argv[1] = "-c";
++		argv[2] = command_string;
++		argv[3] = NULL;
++
++		execv(argv[0], argv);
++		error("Unable to execute '%.100s': %s", cmd, strerror(errno));
++		/* Die with signal to make this error apparent to parent. */
++		signal(SIGTERM, SIG_DFL);
++		kill(getpid(), SIGTERM);
++		_exit(1);
++	}
++	/* Parent. */
++	if (pid < 0)
++		fatal("%s: fork: %.100s", __func__, strerror(errno));
++
++	close(devnull);
++	free(command_string);
++
++	while (waitpid(pid, &status, 0) == -1) {
++		if (errno != EINTR && errno != EAGAIN)
++			fatal("%s: waitpid: %s", __func__, strerror(errno));
++	}
++	if (!WIFEXITED(status)) {
++		error("command '%.100s' exited abnormally", cmd);
++		return -1;
++	} 
++	debug3("command returned status %d", WEXITSTATUS(status));
++	return WEXITSTATUS(status);
++}
++
+diff -urN ./openssh-6.7p1.orig/misc.h ./openssh-6.7p1/misc.h
+--- ./openssh-6.7p1.orig/misc.h	2014-07-18 06:11:26.000000000 +0200
++++ ./openssh-6.7p1/misc.h	2015-03-08 11:49:38.833316980 +0100
+@@ -56,6 +56,7 @@
+ void	 ms_to_timeval(struct timeval *, int);
+ time_t	 monotime(void);
+ void	 lowercase(char *s);
++int	 execute_in_shell(const char *, uid_t);
+ int	 unix_listener(const char *, int, int);
+ 
+ void	 sock_set_v6only(int);
+diff -urN ./openssh-6.7p1.orig/readconf.c ./openssh-6.7p1/readconf.c
+--- ./openssh-6.7p1.orig/readconf.c	2015-03-08 09:29:45.000000000 +0100
++++ ./openssh-6.7p1/readconf.c	2015-03-08 11:47:53.317387981 +0100
+@@ -17,7 +17,6 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <sys/socket.h>
+-#include <sys/wait.h>
+ #include <sys/un.h>
+ 
+ #include <netinet/in.h>
+@@ -33,7 +32,6 @@
+ # include <paths.h>
+ #endif
+ #include <pwd.h>
+-#include <signal.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <string.h>
+@@ -55,7 +53,6 @@
+ #include "buffer.h"
+ #include "kex.h"
+ #include "mac.h"
+-#include "uidswap.h"
+ 
+ /* Format of the configuration file:
+ 
+@@ -416,80 +413,6 @@
+ }
+ 
+ /*
+- * Execute a command in a shell.
+- * Return its exit status or -1 on abnormal exit.
+- */
+-static int
+-execute_in_shell(const char *cmd)
+-{
+-	char *shell, *command_string;
+-	pid_t pid;
+-	int devnull, status;
+-	extern uid_t original_real_uid;
+-
+-	if ((shell = getenv("SHELL")) == NULL)
+-		shell = _PATH_BSHELL;
+-
+-	/*
+-	 * Use "exec" to avoid "sh -c" processes on some platforms
+-	 * (e.g. Solaris)
+-	 */
+-	xasprintf(&command_string, "exec %s", cmd);
+-
+-	/* Need this to redirect subprocess stdin/out */
+-	if ((devnull = open(_PATH_DEVNULL, O_RDWR)) == -1)
+-		fatal("open(/dev/null): %s", strerror(errno));
+-
+-	debug("Executing command: '%.500s'", cmd);
+-
+-	/* Fork and execute the command. */
+-	if ((pid = fork()) == 0) {
+-		char *argv[4];
+-
+-		/* Child.  Permanently give up superuser privileges. */
+-		permanently_drop_suid(original_real_uid);
+-
+-		/* Redirect child stdin and stdout. Leave stderr */
+-		if (dup2(devnull, STDIN_FILENO) == -1)
+-			fatal("dup2: %s", strerror(errno));
+-		if (dup2(devnull, STDOUT_FILENO) == -1)
+-			fatal("dup2: %s", strerror(errno));
+-		if (devnull > STDERR_FILENO)
+-			close(devnull);
+-		closefrom(STDERR_FILENO + 1);
+-
+-		argv[0] = shell;
+-		argv[1] = "-c";
+-		argv[2] = command_string;
+-		argv[3] = NULL;
+-
+-		execv(argv[0], argv);
+-		error("Unable to execute '%.100s': %s", cmd, strerror(errno));
+-		/* Die with signal to make this error apparent to parent. */
+-		signal(SIGTERM, SIG_DFL);
+-		kill(getpid(), SIGTERM);
+-		_exit(1);
+-	}
+-	/* Parent. */
+-	if (pid < 0)
+-		fatal("%s: fork: %.100s", __func__, strerror(errno));
+-
+-	close(devnull);
+-	free(command_string);
+-
+-	while (waitpid(pid, &status, 0) == -1) {
+-		if (errno != EINTR && errno != EAGAIN)
+-			fatal("%s: waitpid: %s", __func__, strerror(errno));
+-	}
+-	if (!WIFEXITED(status)) {
+-		error("command '%.100s' exited abnormally", cmd);
+-		return -1;
+-	} 
+-	debug3("command returned status %d", WEXITSTATUS(status));
+-	return WEXITSTATUS(status);
+-}
+-
+-/*
+  * Parse and execute a Match directive.
+  */
+ static int
+@@ -501,6 +424,7 @@
+ 	int r, port, result = 1, attributes = 0;
+ 	size_t len;
+ 	char thishost[NI_MAXHOST], shorthost[NI_MAXHOST], portstr[NI_MAXSERV];
++	extern uid_t original_real_uid;
+ 
+ 	/*
+ 	 * Configuration is likely to be incomplete at this point so we
+@@ -584,7 +508,7 @@
+ 				debug("%.200s line %d: skipped exec \"%.100s\"",
+ 				    filename, linenum, cmd);
+ 			} else {
+-				r = execute_in_shell(cmd);
++				r = execute_in_shell(cmd, original_real_uid);
+ 				if (r == -1) {
+ 					fatal("%.200s line %d: match exec "
+ 					    "'%.100s' error", filename,
+diff -urN ./openssh-6.7p1.orig/servconf.c ./openssh-6.7p1/servconf.c
+--- ./openssh-6.7p1.orig/servconf.c	2015-03-08 09:29:45.000000000 +0100
++++ ./openssh-6.7p1/servconf.c	2015-03-08 11:46:57.229425727 +0100
+@@ -54,6 +54,7 @@
+ #include "packet.h"
+ #include "hostfile.h"
+ #include "auth.h"
++#include "misc.h"
+ 
+ static void add_listen_addr(ServerOptions *, char *, int);
+ static void add_one_listen_addr(ServerOptions *, char *, int);
+@@ -814,9 +815,10 @@
+ static int
+ match_cfg_line(char **condition, int line, struct connection_info *ci)
+ {
+-	int result = 1, attributes = 0, port;
+-	char *arg, *attrib, *cp = *condition;
++	int r, result = 1, attributes = 0, port;
++	char *arg, *attrib, *cmd, *cp = *condition;
+ 	size_t len;
++	char thishost[NI_MAXHOST], shorthost[NI_MAXHOST], portstr[NI_MAXSERV];
+ 
+ 	if (ci == NULL)
+ 		debug3("checking syntax for 'Match %s'", cp);
+@@ -927,6 +929,45 @@
+ 				    ci->laddress, port, line);
+ 			else
+ 				result = 0;
++		} else if (strcasecmp(attrib, "exec") == 0) {
++			if (ci == NULL) {
++				result = 0;
++				continue;
++			}
++			if (gethostname(thishost, sizeof(thishost)) == -1)
++				fatal("gethostname: %s", strerror(errno));
++			strlcpy(shorthost, thishost, sizeof(shorthost));
++			shorthost[strcspn(thishost, ".")] = '\0';
++			snprintf(portstr, sizeof(portstr), "%d", ci->lport);
++
++			cmd = percent_expand(arg,
++			    "L", shorthost,
++			    "l", thishost,
++			    "h", ci->host,
++			    "P", portstr,
++			    "u", ci->user,
++			    "a", ci->address,
++			    "A", ci->laddress,
++			    (char *)NULL);
++			if (result != 1) {
++				/* skip execution if prior predicate failed */
++				debug("config line %d: skipped exec \"%.100s\"",
++				    line, cmd);
++			} else {
++				r = execute_in_shell(cmd, 0);
++				if (r == -1) {
++					fatal("config line %d: match exec "
++					    "'%.100s' error", line, cmd);
++				} else if (r == 0) {
++					debug("config line %d: matched "
++					    "'exec \"%.100s\"'", line, cmd);
++				} else {
++					debug("config line %d: no match "
++					    "'exec \"%.100s\"'", line, cmd);
++					result = 0;
++				}
++			}
++			free(cmd);
+ 		} else {
+ 			error("Unsupported Match attribute %s", attrib);
+ 			return -1;
